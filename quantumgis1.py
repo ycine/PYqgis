@@ -27,6 +27,10 @@ countries1add = iface.addVectorLayer(countries,'', 'ogr')
 world_cities = r"E:\ASC\DANE GiS\World_Cities\World_Cities.shp"
 world_cities1add = iface.addVectorLayer(world_cities,'','ogr')
 
+
+#mozna odwolac sie do wczytany warstwy poprzez:
+layer = iface.activeLayer()
+
 if world_cities1add.isValid():
 	print('yes')
 else:
@@ -68,6 +72,38 @@ select = countries1add.selectedFeatures()#subselekcja wybierz z zaznaczonych
 for i in select:
 	countries1add.selectByExpression("\"SOV_A3\"='GB1'", QgsVectorLayer.SetSelection)
 
+#iteracja po kazdym obiekcie w warstwie po id
+c = []
+for i in rivers.getFeatures():
+    c.append(i[0])
+
+for z in c:
+    lupa = '"id" = %i' % (z)
+    rivers.selectByExpression(lupa, QgsVectorLayer.SetSelection)
+    print(lupa)
+
+#podobnie jak wyzej selekcja po kazdym obiekcie i dodatkowo selekcja po lokalizacji z zaznaczonych
+c = []
+for i in countries.getFeatures():
+    c.append("'" + i[8] + "'")
+
+for z in c:
+    lupa = '"ADMIN" = %s' % (z)
+    cc = countries.selectByExpression(lupa, QgsVectorLayer.SetSelection)
+    for i in countries.selectedFeatures():
+        pp = processing.run("native:selectbylocation",
+                            {'INPUT': rivers, 'INTERSECT': QgsProcessingFeatureSourceDefinition('0_countries', True),
+                             'METHOD': 0, 'PREDICATE': [0]})
+    print(lupa)
+
+
+
+#help do processingu
+for alg in QgsApplication.processingRegistry().algorithms():
+        print(alg.id(), "->", alg.displayName())
+# help do processingu
+processing.algorithmHelp("native:buffer")
+
 import processing#select by location
 processing.run("native:selectbylocation",  {'INPUT':countries1add,'PREDICATE':[0],'INTERSECT':world_cities1add,'METHOD':0}) # to zaznacz wszystko
 processing.run("native:selectbylocation",  {'INPUT' :world_cities1add, 'INTERSECT' :QgsProcessingFeatureSourceDefinition('0_countries',True), 'METHOD' : 0, 'PREDICATE' : [0] })# zeby byla mozliwosc zaznaczenia tych warstw z zaznaczonych to 2 warstwa musi byc podana z nazwy z tabeli nie instancja czy jakos tak
@@ -77,6 +113,9 @@ processing.run("native:selectbylocation",  {'INPUT' :world_cities1add, 'INTERSEC
 processing.run("native:buffer", { 'DISSOLVE' : False, 'DISTANCE' : 10, 'END_CAP_STYLE' : 0, 'INPUT' : QgsProcessingFeatureSourceDefinition(countries, False), 'JOIN_STYLE' : 0, 'MITER_LIMIT' : 2, 'OUTPUT' : 'C:\Users\Marcin Wiaderkowicz\Desktop\roboczy\BUFBUF.shp', 'SEGMENTS' : 5 }) # tutaj trzeba podac sciezke wyjsciowa dla warstwy
 processing.run("native:buffer", { 'DISSOLVE' : False, 'DISTANCE' : 10, 'END_CAP_STYLE' : 0, 'INPUT' : QgsProcessingFeatureSourceDefinition('World_Cities', True), 'JOIN_STYLE' : 0, 'MITER_LIMIT' : 2, 'OUTPUT' : 'memory:', 'SEGMENTS' : 5 })
 processing.runAndLoadResults("native:buffer", { 'DISSOLVE' : False, 'DISTANCE' : 10, 'END_CAP_STYLE' : 0, 'INPUT' : QgsProcessingFeatureSourceDefinition(countries, True), 'JOIN_STYLE' : 0, 'MITER_LIMIT' : 2, 'OUTPUT' : 'C:/Users/Marcin Wiaderkowicz/Desktop/roboczy/BUFBUF.shp', 'SEGMENTS' : 5 })# to utworzy buffer w okreslonej lokalizacji i doda go do warstw
+processing.runAndLoadResults("saga:splitlinesatpoints", { 'EPSILON' : 0, 'INTERSECT' : 'TEMPORARY_OUTPUT', 'LINES' : 'E:\\ASC\\DANE GiS\\10m_physical\\ne_10m_rivers_europe.shp', 'OUTPUT' : 1, 'SPLIT' : 'E:\\ASC\\DANE GiS\\World_Cities\\World_Cities.shp' })# tutaj istotne jest to ze jest inny dostawca alogrytmu nie native tylko saga jest to widoczne w panelu algorytmow
+>>> processing.runAndLoadResults("gdal:pointsalonglines", { 'DISTANCE' : 0.5, 'GEOMETRY' : 'geometry', 'INPUT' : 'E:\\ASC\\DANE GiS\\10m_physical\\ne_10m_rivers_europe.shp', 'OPTIONS' : '', 'OUTPUT' : 'TEMPORARY_OUTPUT' })#tutaj narzedzie od gdal
+
 
 caps_string = countries1add.dataProvider().capabilities()#to musi byc wykonane na warstwie przed dodawaniem kolumn czy wartosci
 if caps_string & QgsVectorDataProvider.AddAttributes:#dodawanie kolumn do warstwy
@@ -110,6 +149,12 @@ if caps_string & QgsVectorDataProvider.DeleteFeatures: #usuwanie obiektow
 if caps_string & QgsVectorDataProvider.DeleteAttributes:   #usuwanie pol
     res = world_cities1add.dataProvider().deleteAttributes([1])
 
+lis = []
+for i in coun.selectedFeatures():
+    lis.append(i.id())
+if caps_string & QgsVectorDataProvider.DeleteAttributes:   #usuwanie wielu pol
+    res = world_cities1add.dataProvider().deleteAttributes(lis)
+
 world_cities1add.updateFields()# to trzeba wykonac po kazdym usunieciu pola bo samo sie nie zatwierdza
 
 t[0].selectedFeatureCount()#zlicz wszystkie zaznaczone obiekty
@@ -131,7 +176,10 @@ for i in dl: # dodaje atrybuty do wszystkich obiektow z podanym id
         attrs = {94:'667'} #tutaj pierwsza wartosc to index pola, druga wartosc to  wartosc jaka ma byc wprowadzona do pola
         t[1].dataProvider().changeAttributeValues({i:attrs}) #i - czyli numer obietku ? w sensie id ?
 
-
+# to zwraca dlugosc geometrii z danej warstwy
+for i in rivers.getFeatures():
+    geom = i.geometry()
+    print('geometria: ', i.id(), geom.length())
 
 #GOTOWIEC!
 
@@ -151,3 +199,28 @@ for i in fi:
 
 countries1add.selectByExpression("\"SOVEREIGNT\"='Venezuela'", QgsVectorLayer.SetSelection)
 processing.run("native:selectbylocation",  {'INPUT' :world_cities1add, 'INTERSECT' :QgsProcessingFeatureSourceDefinition(countries,True), 'METHOD' : 0, 'PREDICATE' : [0] })#tak tez dziala
+
+
+#GOTOWIEC! selekcja wasrtwy ktora sie przecina z druga nastepnie update atrybutow w tej warstwie na podstawie drugiej
+c = []
+caps_string = rivers.dataProvider().capabilities()
+for i in countries.getFeatures():
+    c.append("'" + i[8] + "'")
+
+for z in c:
+    lupa = '"ADMIN" = %s' % (z)
+    cc = countries.selectByExpression(lupa, QgsVectorLayer.SetSelection)
+    for i in countries.selectedFeatures():
+
+        pp = processing.run("native:selectbylocation",
+                            {'INPUT': rivers, 'INTERSECT': QgsProcessingFeatureSourceDefinition('0_countries', True),
+                             'METHOD': 0, 'PREDICATE': [0]})
+
+        for i in rivers.selectedFeatures():  # edycja atrybutow warstwy
+
+            if caps_string & QgsVectorDataProvider.ChangeAttributeValues:
+                id = i.id()
+                attrs = {14: z}
+                rivers.dataProvider().changeAttributeValues({id: attrs})
+
+    print(lupa)
